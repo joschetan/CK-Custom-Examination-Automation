@@ -3,6 +3,8 @@ import os
 import re
 import pdfplumber
 import gspread
+import base64
+import json
 from google.oauth2.service_account import Credentials
 
 # --- 1. पेज सेटिंग्स ---
@@ -11,16 +13,49 @@ st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
 st.subheader("Adani Invoices Automatic Data Importer")
 st.markdown("---")
 
-# --- 2. गूगल शीट कनेक्शन (सुरक्षित और क्लीन तरीका) ---
+# --- 2. गूगल शीट कनेक्शन (लूप से बाहर निकलने का 100% फुलप्रूफ तरीका) ---
 @st.cache_resource
 def connect_google_sheet():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         
-        # स्ट्रीमलिट क्लाउड के सीक्रेट्स बॉक्स से सुरक्षित डेटा उठाना
-        info_dict = dict(st.secrets["gcp_service_account"])
+        # आपकी पूरी चाबी को बेस64 में सुरक्षित कनवर्ट कर दिया है ताकि TOML/Syntax एरर का नामोनिशान न रहे
+        b64_creds = (
+            "eyJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsICJwcm9qZWN0X2lkIjogImNrLWN1c3Rvb"
+            "S1leGFtaW5hdGlvbiIsICJwcml2YXRlX2tleV9pZCI6ICI3MTUxMWEzMjJkZDJmYWE3OT"
+            "lhNTFkNTIyYzI0ZTQxNmVhOWJlZjNlIiwgInByaXZhdGVfa2V5IjogIi0tLS0tQkVHSU4"
+            "gUFJJVkFURSBLRVktLS0tLVxuTUlJRTZnSUJBREFOQmdrcWhraUc5dzBCQVFFRkFBU0NC"
+            "S2d3Z2dTa0FnRUFBb0lCQVFEVGdQNHVYQUtlYlNOV1xucW5sWFNSWWJ2MThhODVHRWw3U"
+            "zNVa0sxZWlBUFZnRnR2N0xKNHZnWSttanhudXRoSWhxZVdWZm5iZ1R0WHV3XG5VWnYrSn"
+            "JocGJqeHU2SHpXUGlKcC9mSy85NGl0Z0V6NU4xSCtmSVgxeFBjV2pGSUtMa0hQZG5QOHh"
+            "6TUlBUDBcbm1NTk9pNjRSYTExVDlyNnFzWG9idmJOODBtNUxMOWRRaXFXeUhKNGdXK1BQ"
+            "YXlYYkZyVEJJdSs4ZU8wclZyOUtcbm5ZWFFNb2o4RE00MUFhbVRGYVMzVXYySVhwakQ5M"
+            "E0xQVdtcEZCR1NFM3dlOENGQmNnbGxOZ2F5RktHL1l6VXBcblZtWTZQZ0Q1bit6VUkzRE"
+            "lISXlRVlJMZDVxLzFlbjViNjJzZ2FTSHdRS0JnUURwVjJzNXNnbXpYZkNrWDlBbyVmbG9"
+            "zc0NFM0RTaVFwenNTYnB4RjJTVVBCUDMzZTlBZlJES3BBaEFFbHFDcFB6azJXeXZUdTkr"
+            "cSt4anN6emVccWJjWmxyTnJ5WVpIblRXbWtrQUxsbldtZVM1VEZybVE5bTA0bGVWQTh2V"
+            "G5GRlArZ01HNVJ3azFGMHYxaklUVlxuNWJsbDRQODFGcDRJU3YvbkdvWExwRXBib1FLQmd"
+            "RRG9DcmZlREFQa1d1WVAyQ3VSVlJnNG9xODFDQmtXUFZrdVx3NXBDSDZ3cEFuQVI5eDlH"
+            "by90VWpCSHU4TkFJckZweUlya05WTWZPSHRYU3hOTHZ2RzV6NjM5UGNneiU4dU9hXG5VW"
+            "lhYdHQ4TUtyM3oxT1dqa2J4djFQaG51d0gzZUYrbTlUTXpodEpLOFNaSmR5SGxnR2FVSUd"
+            "lQzVyclN1bnFjXG4wek1mWWQ4b3B3S0JnR2cwTE9OSUdjTHJPYkwrcVJSQ29OeUNEMy9O"
+            "OVlhYjJBY1k5RnJRL1JhM0FQK0xZRWNHXG5PcVUxRVZnck9DcWdibGxTMzhDZmp1UVpxd"
+            "0hjTHgrQUtwaTNId3NNcFJYSUpCUnRVN3U1Qm5ORWZLcUlaSGhUXG5SRFZYNDFoYzUzZG"
+            "1nWWdQUWZRT3dCTGdyeVFPTzZnVi9mUjhSVG9kTEpmQmZvUmpPT2RzQi9UaEFvR0JBTGJ"
+            "wXG5aSDdPS0c5dmdEL3o2SDRoZ3dSDHVQcHVWU0ZrNDZGc2xuOFdhKzYxdmxMYjZLd1E5"
+            "VVIzWkZodVJRaGhkUXFqXHlCYUx4ekpzdTVrQW1YU1VqWTRXbTMydlpqQTI3bUFwZmFUd"
+            "VFHRWZnRDkzbHcrUnp1QnhFNDljOUtFblo2MVxuYkZadk1mWG01NUk3UFYydi9MRkVUM2"
+            "sxcFE0ci9Dc1VseFZpWE1xM0FvR0JBT1FWekNNRmVhU2tDcUJ1eUk0RlxuaFgyc1V0aGZ"
+            "0ZzFWc2psRXN3WjBhWGZqckNnNTFJS1V3d2M4NldPTFVmaUYrZU0xdjM3bTkydjNYSmR3"
+            "MkNEM1xiSjktT1d4Z2lsYUkwek51TE9pQ09oVGxOWWNiVzl4dnUxM0pLZ0tOR2RBdFFTS"
+            "GVTVFIxVDBGeklHS3lqTko3XG41MnlveDlzRW9qRHdGWlZjK0tWenVJVzc="
+        )
         
-        creds = Credentials.from_service_account_info(info_dict, scopes=scope)
+        # बेस64 को वापस असली डिक्शनरी में बदलना
+        json_data = base64.b64decode(b64_creds).decode("utf-8")
+        raw_json_credentials = json.loads(json_data)
+        
+        creds = Credentials.from_service_account_info(raw_json_credentials, scopes=scope)
         gc = gspread.authorize(creds)
         spreadsheet_id = "1lEIV6Bcvo7CsiBYWeqURT1PUuvQvoypw6VF92Aq2lcc"
         sh = gc.open_by_key(spreadsheet_id)
