@@ -3,8 +3,7 @@ import os
 import re
 import pdfplumber
 import gspread
-import imaplib
-import email
+import json
 from google.oauth2.service_account import Credentials
 
 # --- 1. पेज सेटिंग्स ---
@@ -13,12 +12,20 @@ st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
 st.subheader("Adani Invoices Automatic Data Importer")
 st.markdown("---")
 
-# --- 2. गूगल शीट कनेक्शन ---
+# --- 2. गूगल शीट कनेक्शन (बिना किसी TOML झंझट के) ---
 @st.cache_resource
 def connect_google_sheet():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        
+        # यहाँ हम सीधे Secrets की स्ट्रिंग को JSON डिक्शनरी में बदल रहे हैं
+        info_json = json.loads(st.secrets["gcp_service_account_raw"])
+        
+        # की के अंदर के बैकस्लैश फिक्स करना
+        if "private_key" in info_json:
+            info_json["private_key"] = info_json["private_key"].replace("\\n", "\n")
+            
+        creds = Credentials.from_service_account_info(info_json, scopes=scope)
         gc = gspread.authorize(creds)
         spreadsheet_id = "1lEIV6Bcvo7CsiBYWeqURT1PUuvQvoypw6VF92Aq2lcc"
         sh = gc.open_by_key(spreadsheet_id)
@@ -103,52 +110,42 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.markdown("### 📁 ऑप्शन 1: मैन्युअल अपलोड")
-    uploaded_files = st.file_uploader("मिसिंग इनवॉइस (PDF फाइल्स) यहाँ चुनें या ड्रॉप करें:", type="pdf", accept_multiple_files=True)
+    uploaded_files = st.file_uploader("मिसिंग इनवॉ... (PDF फाइल्स) यहाँ चुनें:", type="pdf", accept_multiple_files=True)
 
 with col2:
     st.markdown("### 📥 ऑप्शन 2: ईमेल से डायरेक्ट फेच")
     st.info("Gmail से 'Adani Invoices' सीधे सिंक करने के लिए नीचे क्लिक करें")
     gmail_btn = st.button("🔄 Fetch & Import from Gmail", type="secondary", use_container_width=True)
 
-# प्रोसेसिंग डेटा सेविंग लॉजिक
-def save_data_to_sheet(files_to_process):
-    if not worksheet:
-        st.error("गूगल शीट उपलब्ध नहीं है।")
-        return
-    
-    all_existing_rows = worksheet.get_all_values()
-    current_rows_count = len(all_existing_rows)
-    existing_invoices = set(row[15].strip() for row in all_existing_rows[1:] if len(row) > 15 and row[15])
-    
-    all_rows_to_append = []
-    duplicate_count = 0
-    
-    for u_file in files_to_process:
-        try:
-            data = process_single_pdf(u_file)
-            inv_no = str(data["P"]).strip()
-            if inv_no in existing_invoices or any(r["P"] == inv_no for r in all_rows_to_append): 
-                duplicate_count += 1
-            else: 
-                all_rows_to_append.append(data)
-        except Exception as e:
-            st.error(f"त्रुटि: {e}")
-            
-    if all_rows_to_append:
-        sheet_format_data = [[current_rows_count+idx+1, d["B"], "", "", d["E"], "", d["G"], d["H"], d["I"], d["J"], d["K"], d["L"], d["M"], d["N"], d["O"], d["P"], "", "", "", "", ""] for idx, d in enumerate(all_rows_to_append)]
-        worksheet.append_rows(sheet_format_data)
-        st.success(f"🎉 सफलतापूर्वक {len(sheet_format_data)} इनवॉइस इम्पोर्ट हो गए हैं!")
-    else:
-        st.info("ℹ️ कोई नया डेटा आयात नहीं हुआ।")
-    if duplicate_count > 0:
-        st.warning(f"⚠️ {duplicate_count} डुप्लीकेट स्किप किए गए।")
-
-# रन बटन एक्शन
-if uploaded_files:
+if uploaded_files and worksheet is not None:
     if st.button("🚀 Start Manual Import", type="primary", use_container_width=True):
         with st.spinner("प्रोसेसिंग जारी है..."):
-            save_data_to_sheet(uploaded_files)
+            all_existing_rows = worksheet.get_all_values()
+            current_rows_count = len(all_existing_rows)
+            existing_invoices = set(row[15].strip() for row in all_existing_rows[1:] if len(row) > 15 and row[15])
+            
+            all_rows_to_append = []
+            duplicate_count = 0
+            
+            for u_file in uploaded_files:
+                try:
+                    data = process_single_pdf(u_file)
+                    inv_no = str(data["P"]).strip()
+                    if inv_no in existing_invoices or any(r["P"] == inv_no for r in all_rows_to_append): 
+                        duplicate_count += 1
+                    else: 
+                        all_rows_to_append.append(data)
+                except Exception as e:
+                    st.error(f"त्रुटि: {e}")
+                    
+            if all_rows_to_append:
+                sheet_format_data = [[current_rows_count+idx+1, d["B"], "", "", d["E"], "", d["G"], d["H"], d["I"], d["J"], d["K"], d["L"], d["M"], d["N"], d["O"], d["P"], "", "", "", "", ""] for idx, d in enumerate(all_rows_to_append)]
+                worksheet.append_rows(sheet_format_data)
+                st.success(f"🎉 सफलतापूर्वक {len(sheet_format_data)} इनवॉइस इम्पोर्ट हो गए हैं!")
+            else:
+                st.info("ℹ️ कोई नया डेटा आयात नहीं हुआ।")
+            if duplicate_count > 0:
+                st.warning(f"⚠️ {duplicate_count} डुप्लीकेट स्किप किए गए।")
 
 if gmail_btn:
-    st.warning("Gmail सिंक करने के लिए कॉन्फ़िगरेशन एक्टिव किया जा रहा है...")
-    # भविष्य में डायरेक्ट मेल क्रेडेंशियल सिंक के लिए जगह लिंक कर दी गई है।
+    st.warning("Gmail सिंक फ़ीचर एक्टिवेट हो रहा है...")
