@@ -11,17 +11,30 @@ st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
 st.subheader("Adani Invoices Automatic Data Importer")
 st.markdown("---")
 
-# --- 2. गूगल शीट कनेक्शन (परमानेंट तरीका) ---
+# --- 2. गूगल शीट कनेक्शन (एक्सपर्ट AI द्वारा सुझाया गया अचूक तरीका) ---
 @st.cache_resource
 def connect_google_sheet():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         
-        # यह सीधे स्ट्रीमलिट के सीक्रेट्स बॉक्स से डेटा उठाएगा
+        # स्ट्रीमलिट तिजोरी से क्रेडेंशियल्स उठाना
         info_dict = dict(st.secrets["gcp_service_account"])
         
-        # \n को असली न्यूलाइन में बदलेगा
-        info_dict["private_key"] = info_dict["private_key"].replace("\\n", "\n")
+        # --- एक्सपर्ट सॉल्यूशन: चिपकी हुई लाइनों को वापस सही फॉर्मेट में तोड़ना ---
+        pkey = info_dict["private_key"]
+        
+        # अगर स्ट्रीमलिट ने न्यूलाइन्स हटा दी हैं, तो उन्हें 64-64 कैरेक्टर्स के ब्लॉक में सही से री-फॉर्मेट करना
+        if "\n" not in pkey.strip()[27:-25]:
+            header = "-----BEGIN PRIVATE KEY-----"
+            footer = "-----END PRIVATE KEY-----"
+            # हेडर और फुटर के बीच का शुद्ध बेस64 डेटा निकालना
+            core_body = pkey.replace(header, "").replace(footer, "").replace(" ", "").replace("\n", "").strip()
+            # हर 64 अक्षर के बाद एक असली न्यूलाइन (\n) जोड़ना
+            formatted_body = "\n".join([core_body[i:i+64] for i in range(0, len(core_body), 64)])
+            pkey = f"{header}\n{formatted_body}\n{footer}\n"
+            
+        info_dict["private_key"] = pkey
+        # ---------------------------------------------------------------------
         
         creds = Credentials.from_service_account_info(info_dict, scopes=scope)
         gc = gspread.authorize(creds)
@@ -108,7 +121,7 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.markdown("### 📁 ऑप्शन 1: मैन्युअल अपलोड")
-    uploaded_files = st.file_uploader("मिसिंग इनवॉउस (PDF फाइल्स) यहाँ चुनें:", type="pdf", accept_multiple_files=True)
+    uploaded_files = st.file_uploader("मिसिंग इनवॉइस (PDF फाइल्स) यहाँ चुनें:", type="pdf", accept_multiple_files=True)
 
 with col2:
     st.markdown("### 📥 ऑप्शन 2: ईमेल से डायरेक्ट फेच")
