@@ -1,159 +1,25 @@
-import streamlit as st
-import os
-import re
-import pdfplumber
-import gspread
-import json
-from google.oauth2.service_account import Credentials
-
-# --- 1. पेज सेटिंग्स ---
-st.set_page_config(page_title="CK CUSTOM EXAMINATION AUTOMATION", page_icon="⚙️", layout="wide")
-st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
-st.subheader("Adani Invoices Automatic Data Importer")
-st.markdown("---")
-
-# --- 2. गूगल शीट कनेक्शन (चाबी सीधे कोड के अंदर - 100% एरर फ्री) ---
+# --- 2. गूगल शीट कनेक्शन (डेटा हैंडलिंग के साथ) ---
 @st.cache_resource
 def connect_google_sheet():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         
-        # आपकी असली JSON तिजोरी की चाबी सीधे कोड के अंदर सुरक्षित सुरक्षित
-        raw_json_credentials = {
+        # आपकी JSON क्रेडेंशियल वाली डिक्शनरी
+        info_json = json.loads(json.dumps({
           "type": "service_account",
           "project_id": "ck-custom-examination",
           "private_key_id": "71511a322dd2faa799a51d523c24e416ea9bef3e",
-          "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDTgP4uXAKebSNV\nqpnlXSRYbv18a85GEl7S3UkK1eiAPVgFtv7LJ4vgX+mjXnuthIhqeWVfnbgTtXuw\nUZv+Jrhpbjxu6HpZwPiJp/fK/94itgEz5N1H+fIX1xPcWjFIKLkHPdnP8xzMIAP0\nmMNOi64Ra11T9r6qsXobvbN80m5SL9dQiqWyHJ4gW+PPayXbFrTBIu+8eO0rVr9K\nnYXQMoj8DM41AamTFaS3Uv2IXpjQ90M1AWmpFBGSY3we8CfBcgllNgayFKG/YzUp\nItm5676Zcl5do/yJLysubG4CkCq5GbfnwZ/5yN1L9Uv4+OCkLScxHePL/VEw7muY\nuECdEe4HAgMBAAECggEAOnsbTSRB0R5qO8CtRt9HMnCWBHYmlfd0YqevD6Dv5a2Q\njhv4PaIUqhi7GGICnorb0Vz5q8OHZ2Ox7KHUGSUJrpU9foknc3PJBP79pBK1kDF1\nCa1JhiJVT0Q4CKCjqckgyCDQ/g/BsatUjKhEsI4stkJSjunV9IqYMd11KJliybRS\nDYZymL4izjLkYuH7I+3JzL5QWIcPFneVBdhMbeZJpSnVS7gTH8lnzhryIims88Bj\nwifQmRzF16/9YRXdEa/d3XpGvmCsrGutcIMK6NA7DUtjZjJuPuIQMxRh+a9dgZVD\nmlW4YPgD5n+zUI3DIHIyQVRLd5q/1en5b62SgaSHwQKBgQDpV2s5sgmzXfCkX9Ao\nflossCF3DSiQpztSbpxF2SUPBP33e9AfRDKpAhAElqCPPzk2WyvTu9+q+8jspzee\nqBcZlrNryYZHnTWmkKALlnWmeS5TFrmQ9m04leVA8vTnFFP+gMG5Rwk1F+v1jITV\n5bll4P81Fp4ISv/nGoYLpEpboQKBgQDoCrfeDAPkWuYP2CuRVRg4oq81CBkWPVku\nw5pCH6wpAnAR9x9Go/tUjBHu8NAIrFpyIrkNVMfOHtXSxNLv7G5z639Pcgz88uOa\nUZXXwt8MKr3z1OWjkbxv1PhnuwH3eF+m9TMzhtJK8SZJdyHlgGaUIGeC5rrSunqc\n0zMfYd8opwKBgGg0LONIGcLrObL+QsRCoNyCD3/N9Yab2AcY9FrQ/Ra3AP+LYEcG\nOqV1EVgrOCqgbllS38CfjuQZqwHcLx+AK0i3HwsMpRXIJBRtU7u5BnNAfKqIZHhT\nRDVX41hc53dmgZgPQfQOwBLgyvQOO6gV/fR8RRwdLJfBfoRjOOdsB/ThAoGBALb0\nZH7OKG9vgD/z6H4hgwR8uPpuVSFk46Fsln8Wa+61vllb6KwQ9UR3YFhuRQjhpDqj\nyBaLxzJsu5kAmXSUjY4Wm32vZjA27mApfaTuQGFefgD31sw+Rz5BxE49c9KEdZ61\nbFZvMfXm55I7PV2v/LFET3k1pQ4r/CsUlxViXMq3AoGBAOQVzCMFeaSkCqBuyI4F\nhX2sUthftg1VsjlEswZ0aXfjrCg51IKUwwc86WOLUfiF/eM1v3rm92/3YJdw2CD3\nbJ9OWxgilaI0JnuLOiCOhTlNYcbiW9xvu13JKgKNGdAtQSHeSTR1T0FzIGKyjNJ7\n52yox9sEojDwFZVc+KVzuNW7\n-----END PRIVATE KEY-----\n",
-          "client_email": "ck-automation-sa@ck-custom-examination.iam.gserviceaccount.com",
-          "client_id": "106702643581378507527",
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://oauth2.googleapis.com/token",
-          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ck-automation-sa%40ck-custom-examination.iam.gserviceaccount.com",
-          "universe_domain": "googleapis.com"
-        }
+          "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDTgP4uXAKebSNV\nqpnlXSRYbv18a85GEl7S3UkK1eiAPVgFtv7LJ4vgX+mjXnuthIhqeWVfnbgTtXuw\nUZv+Jrhpbjxu6HpZwPiJp/fK/94itgEz5N1H+fIX1xPcWjFIKLkHPdnP8xzMIAP0\nmMNOi64Ra11T9r6qsXobvbN80m5SL9dQiqWyHJ4gW+PPayXbFrTBIu+8eO0rVr9K\nnYXQMoj8DM41AamTFaS3Uv2IXpjQ90M1AWmpFBGSY3we8CfBcgllNgayFKG/YzUp\nItm5676Zcl5do/yJLysubG4CkCq5GbfnwZ/5yN1L9Uv4+OCkLScxHePL/VEw7muY\nuECdEe4HAgMBAAECggEAOnsbTSRB0R5qO8CtRt9HMnCWBHYmlfd0YqevD6Dv5a2Q\njhv4PaIUqhi7GGICnorb0Vz5q8OHZ2Ox7KHUGSUJrpU9foknc3PJBP79pBK1kDF1\nCa1JhiJVT0Q4CKCjqckgyCDQ/g/BsatUjKhEsI4stkJSjunV9IqYMd11KJliybRS\nDYZymL4izjLkYuH7I+3JzL5QWIcPFneVBdhMbeZJpSnVS7gTH8lnzhryIims88Bj\nwifQmRzF16/9YRXdEa/d3XpGvmCsrGutcIMK6NA7DUtjZjJuPuIQMxRh+a9dgZVD\nmlW4YPgD5n+zUI3DIHIyQVRLd5q/1en5b62SgaSHwQKBgQDpV2s5sgmzXfCkX9Ao\nflossCF3DSiQpztSbpxF2SUPBP33e9AfRDKpAhAElqCPPzk2WyvTu9+q+8jspzee\nqBcZlrNryYZHnTWmkKALlnWmeS5TFrmQ9m04leVA8vTnFFP+gMG5Rwk1F+v1jITV\n5bll4P81Fp4ISv/nGoYLpEpboQKBgQDoCrfeDAPkWuYP2CuRVRg4oq81CBkWPVku\nw5pCH6wpAnAR9x9Go/tUjBHu8NAIrFpyIrkNVMfOHtXSxNLv7G5z639Pcgz88uOa\UZXXwt8MKr3z1OWjkbxv1PhnuwH3eF+m9TMzhtJK8SZJdyHlgGaUIGeC5rrSunqc\n0zMfYd8opwKBgGg0LONIGcLrObL+QsRCoNyCD3/N9Yab2AcY9FrQ/Ra3AP+LYEcG\nOqV1EVgrOCqgbllS38CfjuQZqwHcLx+AK0i3HwsMpRXIJBRtU7u5BnNAfKqIZHhT\nRDVX41hc53dmgZgPQfQOwBLgyvQOO6gV/fR8RRwdLJfBfoRjOOdsB/ThAoGBALb0\nZH7OKG9vgD/z6H4hgwR8uPpuVSFk46Fsln8Wa+61vllb6KwQ9UR3YFhuRQjhpDqj\nyBaLxzJsu5kAmXSUjY4Wm32vZjA27mApfaTuQGFefgD31sw+Rz5BxE49c9KEdZ61\nbFZvMfXm55I7PV2v/LFET3k1pQ4r/CsUlxViXMq3AoGBAOQVzCMFeaSkCqBuyI4F\nhX2sUthftg1VsjlEswZ0aXfjrCg51IKUwwc86WOLUfiF/eM1v3rm92/3YJdw2CD3\nbJ9OWxgilaI0JnuLOiCOhTlNYcbiW9xvu13JKgKNGdAtQSHeSTR1T0FzIGKyjNJ7\n52yox9sEojDwFZVc+KVzuNW7\n-----END PRIVATE KEY-----"
+        }))
         
-        creds = Credentials.from_service_account_info(raw_json_credentials, scopes=scope)
+        creds = Credentials.from_service_account_info(info_json, scopes=scope)
         gc = gspread.authorize(creds)
         spreadsheet_id = "1lEIV6Bcvo7CsiBYWeqURT1PUuvQvoypw6VF92Aq2lcc"
         sh = gc.open_by_key(spreadsheet_id)
-        return sh.worksheet("Adani_Invoices")
+        
+        # यहाँ हम शीट का नाम प्रिंट करके देख सकते हैं कि क्या वो मिल रहा है
+        # और वर्कशीट का नाम बदलकर यहाँ जो आपकी शीट में है, वो डाल दें
+        return sh.sheet1 # सीधा पहली शीट ले लेगा, नाम का झंझट खत्म!
     except Exception as e:
         st.error(f"❌ गूगल शीट कनेक्ट नहीं हो सकी: {e}")
         return None
-
-worksheet = connect_google_sheet()
-
-# --- 3. पीडीएफ से डेटा निकालने का लॉजिक ---
-def process_single_pdf(pdf_file):
-    full_text = ""
-    tables_data = []
-    with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
-            text_content = page.extract_text()
-            if text_content: full_text += "\n" + text_content
-            extracted_tables = page.extract_tables()
-            for table in extracted_tables: tables_data.append(table)
-                
-    exp_match = re.search(r"Exporter\s+Name\s*:\s*(.*)", full_text, re.IGNORECASE)
-    exporter_name = exp_match.group(1).strip() if exp_match else ""
-    
-    sb_match = re.search(r"SB\s+No\s*:\s*(\d{7})|SB\s+No\s+(\d{7})", full_text, re.IGNORECASE)
-    sb_no = sb_match.group(1) if sb_match and sb_match.group(1) else (sb_match.group(2) if sb_match else "")
-        
-    inv_match = re.search(r"Invoice\s+No\s*:\s*(\w+)|Invoice\s+Number\s*:\s*(\w+)", full_text, re.IGNORECASE)
-    invoice_no = inv_match.group(1) if inv_match and inv_match.group(1) else (inv_match.group(2) if inv_match else "")
-        
-    condition_val = ""
-    if invoice_no.startswith("MIE"): condition_val = "Buffer"
-    elif invoice_no.startswith("MCP"):
-        if "0-25%" in full_text: condition_val = "First Slab < 25%"
-        elif "25-50%" in full_text: condition_val = "Second Slab 25-50%"
-        elif "above 50%" in full_text: condition_val = "Third Slab > 50%"
-
-    containers, sizes = [], []
-    for table in tables_data:
-        for row in table:
-            row_clean = [str(cell).strip() for cell in row if cell is not None]
-            for cell in row_clean:
-                if re.match(r"^[A-Z]{4}\d{7}$", cell):
-                    if cell not in containers:
-                        containers.append(cell)
-                        if "20" in row_clean: sizes.append("20 Feet")
-                        elif "40" in row_clean or "45" in row_clean: sizes.append("40 Feet")
-                        else: sizes.append("")
-
-    container_no_str = ", ".join(containers) if containers else ""
-    unique_sizes = list(set([s for s in sizes if s]))
-    size_str = ", ".join(unique_sizes) if unique_sizes else ""
-    container_count = len(containers) if containers else 0
-    
-    taxable_amount, igst_amount, total_bill_amount = 0.0, 0.0, 0.0
-    tax_match = re.search(r"Total\s+Tax\s+Value\s*\(In\s+figure\)\s*:\s*([\d\.,]+)", full_text, re.IGNORECASE)
-    if tax_match: igst_amount = float(tax_match.group(1).replace(',', '').strip())
-        
-    bill_match = re.search(r"Total\s+Invoice\s+Value\s*\(In\s+figure\)\s*:\s*([\d\.,]+)", full_text, re.IGNORECASE)
-    if bill_match: total_bill_amount = float(bill_match.group(1).replace(',', '').strip())
-
-    for table in tables_data:
-        if len(table) > 1:
-            for row in table:
-                row_clean = [str(cell).strip() for cell in row if cell is not None]
-                if any("total" in str(cell).lower() for cell in row_clean):
-                    numbers_in_row = [float(c.replace(',', '').strip()) for c in row_clean if re.match(r"^\d+(\.\d+)?$", c.replace(',', '').strip())]
-                    if numbers_in_row: taxable_amount = numbers_in_row[0]
-                    break
-            if taxable_amount > 0: break
-
-    if taxable_amount == 0.0 and total_bill_amount > 0: taxable_amount = round(total_bill_amount - igst_amount, 2)
-    col_n_val = round(taxable_amount * 0.02, 2)
-    col_o_val = round(total_bill_amount - col_n_val, 2)
-    
-    return {"B": exporter_name, "C": "", "D": "", "E": sb_no, "F": "", "G": container_no_str, "H": condition_val, 
-            "I": size_str, "J": container_count, "K": taxable_amount, "L": igst_amount, "M": total_bill_amount, 
-            "N": col_n_val, "O": col_o_val, "P": invoice_no}
-
-# --- 4. यूज़र इंटरफेस लेआउट ---
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.markdown("### 📁 ऑप्शन 1: मैन्युअल अपलोड")
-    uploaded_files = st.file_uploader("मिसिंग इनवॉइस (PDF फाइल्स) यहाँ चुनें:", type="pdf", accept_multiple_files=True)
-
-with col2:
-    st.markdown("### 📥 ऑप्शन 2: ईमेल से डायरेक्ट फेच")
-    st.info("Gmail से 'Adani Invoices' सीधे सिंक करने के लिए नीचे क्लिक करें")
-    gmail_btn = st.button("🔄 Fetch & Import from Gmail", type="secondary", use_container_width=True)
-
-if uploaded_files and worksheet is not None:
-    if st.button("🚀 Start Manual Import", type="primary", use_container_width=True):
-        with st.spinner("प्रोसेसिंग जारी है..."):
-            all_existing_rows = worksheet.get_all_values()
-            current_rows_count = len(all_existing_rows)
-            existing_invoices = set(row[15].strip() for row in all_existing_rows[1:] if len(row) > 15 and row[15])
-            
-            all_rows_to_append = []
-            duplicate_count = 0
-            
-            for u_file in uploaded_files:
-                try:
-                    data = process_single_pdf(u_file)
-                    inv_no = str(data["P"]).strip()
-                    if inv_no in existing_invoices or any(r["P"] == inv_no for r in all_rows_to_append): 
-                        duplicate_count += 1
-                    else: 
-                        all_rows_to_append.append(data)
-                except Exception as e:
-                    st.error(f"त्रुटि: {e}")
-                    
-            if all_rows_to_append:
-                sheet_format_data = [[current_rows_count+idx+1, d["B"], "", "", d["E"], "", d["G"], d["H"], d["I"], d["J"], d["K"], d["L"], d["M"], d["N"], d["O"], d["P"], "", "", "", "", ""] for idx, d in enumerate(all_rows_to_append)]
-                worksheet.append_rows(sheet_format_data)
-                st.success(f"🎉 सफलतापूर्वक {len(sheet_format_data)} इनवॉइस इम्पोर्ट हो गए हैं!")
-            else:
-                st.info("ℹ️ कोई नया डेटा आयात नहीं हुआ।")
-            if duplicate_count > 0:
-                st.warning(f"⚠️ {duplicate_count} डुप्लीकेट स्किप किए गए।")
-
-if gmail_btn:
-    st.warning("Gmail सिंक फ़ीचर एक्टिवेट हो रहा है...")
