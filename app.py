@@ -3,7 +3,6 @@ import os
 import re
 import pdfplumber
 import gspread
-import json
 from google.oauth2.service_account import Credentials
 
 # --- 1. पेज सेटिंग्स ---
@@ -12,20 +11,16 @@ st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
 st.subheader("Adani Invoices Automatic Data Importer")
 st.markdown("---")
 
-# --- 2. गूगल शीट कनेक्शन (बिना किसी TOML झंझट के) ---
+# --- 2. गूगल शीट कनेक्शन (गिटहब सीकेट्स से डायरेक्ट) ---
 @st.cache_resource
 def connect_google_sheet():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         
-        # यहाँ हम सीधे Secrets की स्ट्रिंग को JSON डिक्शनरी में बदल रहे हैं
-        info_json = json.loads(st.secrets["gcp_service_account_raw"])
+        # यह सीधे गिटहब वाले .streamlit/secrets.toml से डेटा उठाएगा
+        info_dict = dict(st.secrets["gcp_service_account"])
         
-        # की के अंदर के बैकस्लैश फिक्स करना
-        if "private_key" in info_json:
-            info_json["private_key"] = info_json["private_key"].replace("\\n", "\n")
-            
-        creds = Credentials.from_service_account_info(info_json, scopes=scope)
+        creds = Credentials.from_service_account_info(info_dict, scopes=scope)
         gc = gspread.authorize(creds)
         spreadsheet_id = "1lEIV6Bcvo7CsiBYWeqURT1PUuvQvoypw6VF92Aq2lcc"
         sh = gc.open_by_key(spreadsheet_id)
@@ -110,7 +105,7 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.markdown("### 📁 ऑप्शन 1: मैन्युअल अपलोड")
-    uploaded_files = st.file_uploader("मिसिंग इनवॉ... (PDF फाइल्स) यहाँ चुनें:", type="pdf", accept_multiple_files=True)
+    uploaded_files = st.file_uploader("मिसिंग इनवॉइस (PDF फाइल्स) यहाँ चुनें:", type="pdf", accept_multiple_files=True)
 
 with col2:
     st.markdown("### 📥 ऑप्शन 2: ईमेल से डायरेक्ट फेच")
