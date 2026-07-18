@@ -3,7 +3,6 @@ import os
 import re
 import pdfplumber
 import gspread
-import base64
 import json
 from google.oauth2.service_account import Credentials
 
@@ -13,47 +12,57 @@ st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
 st.subheader("Adani Invoices Automatic Data Importer")
 st.markdown("---")
 
-# --- 2. गूगल शीट कनेक्शन (लूप से बाहर निकलने का 100% फुलप्रूफ तरीका) ---
+# --- 2. गूगल शीट कनेक्शन (बिना किसी पार्सर झंझट के डायरेक्ट कनेक्शन) ---
 @st.cache_resource
 def connect_google_sheet():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         
-        # आपकी पूरी चाबी को बेस64 में सुरक्षित कनवर्ट कर दिया है ताकि TOML/Syntax एरर का नामोनिशान न रहे
-        b64_creds = (
-            "eyJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIsICJwcm9qZWN0X2lkIjogImNrLWN1c3Rvb"
-            "S1leGFtaW5hdGlvbiIsICJwcml2YXRlX2tleV9pZCI6ICI3MTUxMWEzMjJkZDJmYWE3OT"
-            "lhNTFkNTIyYzI0ZTQxNmVhOWJlZjNlIiwgInByaXZhdGVfa2V5IjogIi0tLS0tQkVHSU4"
-            "gUFJJVkFURSBLRVktLS0tLVxuTUlJRTZnSUJBREFOQmdrcWhraUc5dzBCQVFFRkFBU0NC"
-            "S2d3Z2dTa0FnRUFBb0lCQVFEVGdQNHVYQUtlYlNOV1xucW5sWFNSWWJ2MThhODVHRWw3U"
-            "zNVa0sxZWlBUFZnRnR2N0xKNHZnWSttanhudXRoSWhxZVdWZm5iZ1R0WHV3XG5VWnYrSn"
-            "JocGJqeHU2SHpXUGlKcC9mSy85NGl0Z0V6NU4xSCtmSVgxeFBjV2pGSUtMa0hQZG5QOHh"
-            "6TUlBUDBcbm1NTk9pNjRSYTExVDlyNnFzWG9idmJOODBtNUxMOWRRaXFXeUhKNGdXK1BQ"
-            "YXlYYkZyVEJJdSs4ZU8wclZyOUtcbm5ZWFFNb2o4RE00MUFhbVRGYVMzVXYySVhwakQ5M"
-            "E0xQVdtcEZCR1NFM3dlOENGQmNnbGxOZ2F5RktHL1l6VXBcblZtWTZQZ0Q1bit6VUkzRE"
-            "lISXlRVlJMZDVxLzFlbjViNjJzZ2FTSHdRS0JnUURwVjJzNXNnbXpYZkNrWDlBbyVmbG9"
-            "zc0NFM0RTaVFwenNTYnB4RjJTVVBCUDMzZTlBZlJES3BBaEFFbHFDcFB6azJXeXZUdTkr"
-            "cSt4anN6emVccWJjWmxyTnJ5WVpIblRXbWtrQUxsbldtZVM1VEZybVE5bTA0bGVWQTh2V"
-            "G5GRlArZ01HNVJ3azFGMHYxaklUVlxuNWJsbDRQODFGcDRJU3YvbkdvWExwRXBib1FLQmd"
-            "RRG9DcmZlREFQa1d1WVAyQ3VSVlJnNG9xODFDQmtXUFZrdVx3NXBDSDZ3cEFuQVI5eDlH"
-            "by90VWpCSHU4TkFJckZweUlya05WTWZPSHRYU3hOTHZ2RzV6NjM5UGNneiU4dU9hXG5VW"
-            "lhYdHQ4TUtyM3oxT1dqa2J4djFQaG51d0gzZUYrbTlUTXpodEpLOFNaSmR5SGxnR2FVSUd"
-            "lQzVyclN1bnFjXG4wek1mWWQ4b3B3S0JnR2cwTE9OSUdjTHJPYkwrcVJSQ29OeUNEMy9O"
-            "OVlhYjJBY1k5RnJRL1JhM0FQK0xZRWNHXG5PcVUxRVZnck9DcWdibGxTMzhDZmp1UVpxd"
-            "0hjTHgrQUtwaTNId3NNcFJYSUpCUnRVN3U1Qm5ORWZLcUlaSGhUXG5SRFZYNDFoYzUzZG"
-            "1nWWdQUWZRT3dCTGdyeVFPTzZnVi9mUjhSVG9kTEpmQmZvUmpPT2RzQi9UaEFvR0JBTGJ"
-            "wXG5aSDdPS0c5dmdEL3o2SDRoZ3dSDHVQcHVWU0ZrNDZGc2xuOFdhKzYxdmxMYjZLd1E5"
-            "VVIzWkZodVJRaGhkUXFqXHlCYUx4ekpzdTVrQW1YU1VqWTRXbTMydlpqQTI3bUFwZmFUd"
-            "VFHRWZnRDkzbHcrUnp1QnhFNDljOUtFblo2MVxuYkZadk1mWG01NUk3UFYydi9MRkVUM2"
-            "sxcFE0ci9Dc1VseFZpWE1xM0FvR0JBT1FWekNNRmVhU2tDcUJ1eUk0RlxuaFgyc1V0aGZ"
-            "0ZzFWc2psRXN3WjBhWGZqckNnNTFJS1V3d2M4NldPTFVmaUYrZU0xdjM3bTkydjNYSmR3"
-            "MkNEM1xiSjktT1d4Z2lsYUkwek51TE9pQ09oVGxOWWNiVzl4dnUxM0pLZ0tOR2RBdFFTS"
-            "GVTVFIxVDBGeklHS3lqTko3XG41MnlveDlzRW9qRHdGWlZjK0tWenVJVzc="
+        # चाबी की एक-एक लाइन को सादे अक्षरों में बिना किसी \n या \q के सीधे स्टोर किया गया है
+        clean_private_key = (
+            "-----BEGIN PRIVATE KEY-----\n"
+            "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDTgP4uXAKebSNV\n"
+            "qpnlXSRYbv18a85GEl7S3UkK1eiAPVgFtv7LJ4vgX+mjXnuthIhqeWVfnbgTtXuw\n"
+            "UZv+Jrhpbjxu6HpZwPiJp/fK/94itgEz5N1H+fIX1xPcWjFIKLkHPdnP8xzMIAP0\n"
+            "mMNOi64Ra11T9r6qsXobvbN80m5SL9dQiqWyHJ4gW+PPayXbFrTBIu+8eO0rVr9K\n"
+            "nYXQMoj8DM41AamTFaS3Uv2IXpjQ90M1AWmpFBGSY3we8CfBcgllNgayFKG/YzUp\n"
+            "Itm5676Zcl5do/yJLysubG4CkCq5GbfnwZ/5yN1L9Uv4+OCkLScxHePL/VEw7muY\n"
+            "uECdEe4HAgMBAAECggEAOnsbTSRB0R5qO8CtRt9HMnCWBHYmlfd0YqevD6Dv5a2Q\n"
+            "jhv4PaIUqhi7GGICnorb0Vz5q8OHZ2Ox7KHUGSUJrpU9foknc3PJBP79pBK1kDF1\n"
+            "Ca1JhiJVT0Q4CKCjqckgyCDQ/g/BsatUjKhEsI4stkJSjunV9IqYMd11KJliybRS\n"
+            "DYZymL4izjLkYuH7I+3JzL5QWIcPFneVBdhMbeZJpSnVS7gTH8lnzhryIims88Bj\n"
+            "wifQmRzF16/9YRXdEa/d3XpGvmCsrGutcIMK6NA7DUtjZjJuPuIQMxRh+a9dgZVD\n"
+            "mlW4YPgD5n+zUI3DIHIyQVRLd5q/1en5b62SgaSHwQKBgQDpV2s5sgmzXfCkX9Ao\n"
+            "flossCF3DSiQpztSbpxF2SUPBP33e9AfRDKpAhAElqCPPzk2WyvTu9+q+8jspzee\n"
+            "qBcZlrNryYZHnTWmkKALlnWmeS5TFrmQ9m04leVA8vTnFFP+gMG5Rwk1F+v1jITV\n"
+            "5bll4P81Fp4ISv/nGoYLpEpboQKBgQDoCrfeDAPkWuYP2CuRVRg4oq81CBkWPVku\n"
+            "w5pCH6wpAnAR9x9Go/tUjBHu8NAIrFpyIrkNVMfOHtXSxNLv7G5z639Pcgz88uOa\n"
+            "UZXXwt8MKr3z1OWjkbxv1PhnuwH3eF+m9TMzhtJK8SZJdyHlgGaUIGeC5rrSunqc\n"
+            "0zMfYd8opwKBgGg0LONIGcLrObL+QsRCoNyCD3/N9Yab2AcY9FrQ/Ra3AP+LYEcG\n"
+            "OqV1EVgrOCqgbllS38CfjuQZqwHcLx+AK0i3HwsMpRXIJBRtU7u5BnNAfKqIZHhT\n"
+            "RDVX41hc53dmgZgPQfQOwBLgyvQOO6gV/fR8RRwdLJfBfoRjOOdsB/ThAoGBALb0\n"
+            "ZH7OKG9vgD/z6H4hgwR8uPpuVSFk46Fsln8Wa+61vllb6KwQ9UR3YFhuRQjhpDqj\n"
+            "yBaLxzJsu5kAmXSUjY4Wm32vZjA27mApfaTuQGFefgD31sw+Rz5BxE49c9KEdZ61\n"
+            "bFZvMfXm55I7PV2v/LFET3k1pQ4r/CsUlxViXMq3AoGBAOQVzCMFeaSkCqBuyI4F\n"
+            "nhX2sUthftg1VsjlEswZ0aXfjrCg51IKUwwc86WOLUfiF/eM1v3rm92/3YJdw2CD3\n"
+            "bJ9OWxgilaI0JnuLOiCOhTlNYcbiW9xvu13JKgKNGdAtQSHeSTR1T0FzIGKyjNJ7\n"
+            "52yox9sEojDwFZVc+KVzuNW7\n"
+            "-----END PRIVATE KEY-----\n"
         )
-        
-        # बेस64 को वापस असली डिक्शनरी में बदलना
-        json_data = base64.b64decode(b64_creds).decode("utf-8")
-        raw_json_credentials = json.loads(json_data)
+
+        raw_json_credentials = {
+          "type": "service_account",
+          "project_id": "ck-custom-examination",
+          "private_key_id": "71511a322dd2faa799a51d523c24e416ea9bef3e",
+          "private_key": clean_private_key,
+          "client_email": "ck-automation-sa@ck-custom-examination.iam.gserviceaccount.com",
+          "client_id": "106702643581378507527",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": "https://oauth2.googleapis.com/token",
+          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ck-automation-sa%40ck-custom-examination.iam.gserviceaccount.com",
+          "universe_domain": "googleapis.com"
+        }
         
         creds = Credentials.from_service_account_info(raw_json_credentials, scopes=scope)
         gc = gspread.authorize(creds)
