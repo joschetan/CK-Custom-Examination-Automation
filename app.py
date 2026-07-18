@@ -12,59 +12,16 @@ st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
 st.subheader("Adani Invoices Automatic Data Importer")
 st.markdown("---")
 
-# --- 2. गूगल शीट कनेक्शन (बिना किसी पार्सर झंझट के डायरेक्ट कनेक्शन) ---
+# --- 2. गूगल शीट कनेक्शन (सुरक्षित और क्लीन तरीका) ---
 @st.cache_resource
 def connect_google_sheet():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         
-        # चाबी की एक-एक लाइन को सादे अक्षरों में बिना किसी \n या \q के सीधे स्टोर किया गया है
-        clean_private_key = (
-            "-----BEGIN PRIVATE KEY-----\n"
-            "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDTgP4uXAKebSNV\n"
-            "qpnlXSRYbv18a85GEl7S3UkK1eiAPVgFtv7LJ4vgX+mjXnuthIhqeWVfnbgTtXuw\n"
-            "UZv+Jrhpbjxu6HpZwPiJp/fK/94itgEz5N1H+fIX1xPcWjFIKLkHPdnP8xzMIAP0\n"
-            "mMNOi64Ra11T9r6qsXobvbN80m5SL9dQiqWyHJ4gW+PPayXbFrTBIu+8eO0rVr9K\n"
-            "nYXQMoj8DM41AamTFaS3Uv2IXpjQ90M1AWmpFBGSY3we8CfBcgllNgayFKG/YzUp\n"
-            "Itm5676Zcl5do/yJLysubG4CkCq5GbfnwZ/5yN1L9Uv4+OCkLScxHePL/VEw7muY\n"
-            "uECdEe4HAgMBAAECggEAOnsbTSRB0R5qO8CtRt9HMnCWBHYmlfd0YqevD6Dv5a2Q\n"
-            "jhv4PaIUqhi7GGICnorb0Vz5q8OHZ2Ox7KHUGSUJrpU9foknc3PJBP79pBK1kDF1\n"
-            "Ca1JhiJVT0Q4CKCjqckgyCDQ/g/BsatUjKhEsI4stkJSjunV9IqYMd11KJliybRS\n"
-            "DYZymL4izjLkYuH7I+3JzL5QWIcPFneVBdhMbeZJpSnVS7gTH8lnzhryIims88Bj\n"
-            "wifQmRzF16/9YRXdEa/d3XpGvmCsrGutcIMK6NA7DUtjZjJuPuIQMxRh+a9dgZVD\n"
-            "mlW4YPgD5n+zUI3DIHIyQVRLd5q/1en5b62SgaSHwQKBgQDpV2s5sgmzXfCkX9Ao\n"
-            "flossCF3DSiQpztSbpxF2SUPBP33e9AfRDKpAhAElqCPPzk2WyvTu9+q+8jspzee\n"
-            "qBcZlrNryYZHnTWmkKALlnWmeS5TFrmQ9m04leVA8vTnFFP+gMG5Rwk1F+v1jITV\n"
-            "5bll4P81Fp4ISv/nGoYLpEpboQKBgQDoCrfeDAPkWuYP2CuRVRg4oq81CBkWPVku\n"
-            "w5pCH6wpAnAR9x9Go/tUjBHu8NAIrFpyIrkNVMfOHtXSxNLv7G5z639Pcgz88uOa\n"
-            "UZXXwt8MKr3z1OWjkbxv1PhnuwH3eF+m9TMzhtJK8SZJdyHlgGaUIGeC5rrSunqc\n"
-            "0zMfYd8opwKBgGg0LONIGcLrObL+QsRCoNyCD3/N9Yab2AcY9FrQ/Ra3AP+LYEcG\n"
-            "OqV1EVgrOCqgbllS38CfjuQZqwHcLx+AK0i3HwsMpRXIJBRtU7u5BnNAfKqIZHhT\n"
-            "RDVX41hc53dmgZgPQfQOwBLgyvQOO6gV/fR8RRwdLJfBfoRjOOdsB/ThAoGBALb0\n"
-            "ZH7OKG9vgD/z6H4hgwR8uPpuVSFk46Fsln8Wa+61vllb6KwQ9UR3YFhuRQjhpDqj\n"
-            "yBaLxzJsu5kAmXSUjY4Wm32vZjA27mApfaTuQGFefgD31sw+Rz5BxE49c9KEdZ61\n"
-            "bFZvMfXm55I7PV2v/LFET3k1pQ4r/CsUlxViXMq3AoGBAOQVzCMFeaSkCqBuyI4F\n"
-            "nhX2sUthftg1VsjlEswZ0aXfjrCg51IKUwwc86WOLUfiF/eM1v3rm92/3YJdw2CD3\n"
-            "bJ9OWxgilaI0JnuLOiCOhTlNYcbiW9xvu13JKgKNGdAtQSHeSTR1T0FzIGKyjNJ7\n"
-            "52yox9sEojDwFZVc+KVzuNW7\n"
-            "-----END PRIVATE KEY-----\n"
-        )
-
-        raw_json_credentials = {
-          "type": "service_account",
-          "project_id": "ck-custom-examination",
-          "private_key_id": "71511a322dd2faa799a51d523c24e416ea9bef3e",
-          "private_key": clean_private_key,
-          "client_email": "ck-automation-sa@ck-custom-examination.iam.gserviceaccount.com",
-          "client_id": "106702643581378507527",
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://oauth2.googleapis.com/token",
-          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/ck-automation-sa%40ck-custom-examination.iam.gserviceaccount.com",
-          "universe_domain": "googleapis.com"
-        }
+        # यह डेटा सीधे स्ट्रीमलिट की सुरक्षित तिजोरी (Secrets) से आएगा, GitHub को हवा भी नहीं लगेगी!
+        info_dict = dict(st.secrets["gcp_service_account"])
         
-        creds = Credentials.from_service_account_info(raw_json_credentials, scopes=scope)
+        creds = Credentials.from_service_account_info(info_dict, scopes=scope)
         gc = gspread.authorize(creds)
         spreadsheet_id = "1lEIV6Bcvo7CsiBYWeqURT1PUuvQvoypw6VF92Aq2lcc"
         sh = gc.open_by_key(spreadsheet_id)
