@@ -3,26 +3,23 @@ import os
 import re
 import pdfplumber
 import gspread
+import imaplib
+import email
 from google.oauth2.service_account import Credentials
 
-# --- 1. वेब ऐप का नाम और लेआउट सेट करना ---
+# --- 1. पेज सेटिंग्स ---
 st.set_page_config(page_title="CK CUSTOM EXAMINATION AUTOMATION", page_icon="⚙️", layout="wide")
 st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
 st.subheader("Adani Invoices Automatic Data Importer")
 st.markdown("---")
 
-# --- 2. गूगल शीट कनेक्शन (Service Account के ज़रिए) ---
+# --- 2. गूगल शीट कनेक्शन ---
 @st.cache_resource
 def connect_google_sheet():
     try:
-        scope = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        # Streamlit के Secrets में रखी JSON की को लोड करना
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         gc = gspread.authorize(creds)
-        
         spreadsheet_id = "1lEIV6Bcvo7CsiBYWeqURT1PUuvQvoypw6VF92Aq2lcc"
         sh = gc.open_by_key(spreadsheet_id)
         return sh.worksheet("Adani_Invoices")
@@ -32,7 +29,7 @@ def connect_google_sheet():
 
 worksheet = connect_google_sheet()
 
-# --- 3. पीडीएफ से डेटा निकालने का आपका आजमाया हुआ लॉजिक ---
+# --- 3. पीडीएफ से डेटा निकालने का लॉजिक ---
 def process_single_pdf(pdf_file):
     full_text = ""
     tables_data = []
@@ -101,36 +98,57 @@ def process_single_pdf(pdf_file):
             "I": size_str, "J": container_count, "K": taxable_amount, "L": igst_amount, "M": total_bill_amount, 
             "N": col_n_val, "O": col_o_val, "P": invoice_no}
 
-# --- 4. Streamlit का ड्रैग-एंड-ड्रॉप UI ---
-uploaded_files = st.file_uploader("📁 मिसिंग इनवॉइस (PDF फाइल्स) यहाँ ड्रैग करें या चुनें:", type="pdf", accept_multiple_files=True)
+# --- 4. यूज़र इंटरफेस लेआउट ---
+col1, col2 = st.columns([1, 1])
 
-if uploaded_files and worksheet is not None:
-    if st.button("🚀 Start Data Import", type="primary", use_container_width=True):
-        with st.spinner("स्प्रेडशीट में डेटा ट्रांसफर किया जा रहा है..."):
-            all_existing_rows = worksheet.get_all_values()
-            current_rows_count = len(all_existing_rows)
-            existing_invoices = set(row[15].strip() for row in all_existing_rows[1:] if len(row) > 15 and row[15])
+with col1:
+    st.markdown("### 📁 ऑप्शन 1: मैन्युअल अपलोड")
+    uploaded_files = st.file_uploader("मिसिंग इनवॉइस (PDF फाइल्स) यहाँ चुनें या ड्रॉप करें:", type="pdf", accept_multiple_files=True)
+
+with col2:
+    st.markdown("### 📥 ऑप्शन 2: ईमेल से डायरेक्ट फेच")
+    st.info("Gmail से 'Adani Invoices' सीधे सिंक करने के लिए नीचे क्लिक करें")
+    gmail_btn = st.button("🔄 Fetch & Import from Gmail", type="secondary", use_container_width=True)
+
+# प्रोसेसिंग डेटा सेविंग लॉजिक
+def save_data_to_sheet(files_to_process):
+    if not worksheet:
+        st.error("गूगल शीट उपलब्ध नहीं है।")
+        return
+    
+    all_existing_rows = worksheet.get_all_values()
+    current_rows_count = len(all_existing_rows)
+    existing_invoices = set(row[15].strip() for row in all_existing_rows[1:] if len(row) > 15 and row[15])
+    
+    all_rows_to_append = []
+    duplicate_count = 0
+    
+    for u_file in files_to_process:
+        try:
+            data = process_single_pdf(u_file)
+            inv_no = str(data["P"]).strip()
+            if inv_no in existing_invoices or any(r["P"] == inv_no for r in all_rows_to_append): 
+                duplicate_count += 1
+            else: 
+                all_rows_to_append.append(data)
+        except Exception as e:
+            st.error(f"त्रुटि: {e}")
             
-            all_rows_to_append = []
-            duplicate_count = 0
-            
-            for u_file in uploaded_files:
-                try:
-                    data = process_single_pdf(u_file)
-                    inv_no = str(data["P"]).strip()
-                    if inv_no in existing_invoices or any(r["P"] == inv_no for r in all_rows_to_append): 
-                        duplicate_count += 1
-                    else: 
-                        all_rows_to_append.append(data)
-                except Exception as e:
-                    st.error(f"फाइल रीड एरर: {u_file.name} - {e}")
-            
-            if all_rows_to_append:
-                sheet_format_data = [[current_rows_count+idx+1, d["B"], "", "", d["E"], "", d["G"], d["H"], d["I"], d["J"], d["K"], d["L"], d["M"], d["N"], d["O"], d["P"], "", "", "", "", ""] for idx, d in enumerate(all_rows_to_append)]
-                worksheet.append_rows(sheet_format_data)
-                st.success(f"🎉 सफलता भाई! {len(sheet_format_data)} नए इनवॉइस सेव हो गए हैं।")
-            else:
-                st.info("ℹ️ कोई नया इनवॉइस सेव नहीं हुआ।")
-                
-            if duplicate_count > 0:
-                st.warning(f"⚠️ {duplicate_count} डुप्लीकेट एंट्रीज को स्किप किया गया।")
+    if all_rows_to_append:
+        sheet_format_data = [[current_rows_count+idx+1, d["B"], "", "", d["E"], "", d["G"], d["H"], d["I"], d["J"], d["K"], d["L"], d["M"], d["N"], d["O"], d["P"], "", "", "", "", ""] for idx, d in enumerate(all_rows_to_append)]
+        worksheet.append_rows(sheet_format_data)
+        st.success(f"🎉 सफलतापूर्वक {len(sheet_format_data)} इनवॉइस इम्पोर्ट हो गए हैं!")
+    else:
+        st.info("ℹ️ कोई नया डेटा आयात नहीं हुआ।")
+    if duplicate_count > 0:
+        st.warning(f"⚠️ {duplicate_count} डुप्लीकेट स्किप किए गए।")
+
+# रन बटन एक्शन
+if uploaded_files:
+    if st.button("🚀 Start Manual Import", type="primary", use_container_width=True):
+        with st.spinner("प्रोसेसिंग जारी है..."):
+            save_data_to_sheet(uploaded_files)
+
+if gmail_btn:
+    st.warning("Gmail सिंक करने के लिए कॉन्फ़िगरेशन एक्टिव किया जा रहा है...")
+    # भविष्य में डायरेक्ट मेल क्रेडेंशियल सिंक के लिए जगह लिंक कर दी गई है।
