@@ -3,7 +3,6 @@ import os
 import re
 import pdfplumber
 import gspread
-import json
 from google.oauth2.service_account import Credentials
 
 # --- 1. पेज सेटिंग्स ---
@@ -12,33 +11,28 @@ st.title("⚙️ CK CUSTOM EXAMINATION AUTOMATION")
 st.subheader("Adani Invoices Automatic Data Importer")
 st.markdown("---")
 
-# --- 2. सीक्रेट की फ़ाइल अपलोडर (कॉपी-पेस्ट का झंझट खत्म!) ---
-st.sidebar.markdown("### 🔑 Google Cloud Authentication")
-uploaded_key_file = st.sidebar.file_uploader("अपनी नई JSON चाबी फ़ाइल यहाँ अपलोड करें:", type="json")
-
+# --- 2. गूगल शीट कनेक्शन (परमानेंट तरीका) ---
 @st.cache_resource
-def connect_google_sheet(json_data):
+def connect_google_sheet():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(json_data, scopes=scope)
+        
+        # यह सीधे स्ट्रीमलिट के सीक्रेट्स बॉक्स से डेटा उठाएगा
+        info_dict = dict(st.secrets["gcp_service_account"])
+        
+        # \n को असली न्यूलाइन में बदलेगा
+        info_dict["private_key"] = info_dict["private_key"].replace("\\n", "\n")
+        
+        creds = Credentials.from_service_account_info(info_dict, scopes=scope)
         gc = gspread.authorize(creds)
         spreadsheet_id = "1lEIV6Bcvo7CsiBYWeqURT1PUuvQvoypw6VF92Aq2lcc"
         sh = gc.open_by_key(spreadsheet_id)
         return sh.sheet1
     except Exception as e:
-        st.sidebar.error(f"❌ कनेक्शन फेल: {e}")
+        st.error(f"❌ गूगल शीट कनेक्ट नहीं हो सकी: {e}")
         return None
 
-worksheet = None
-if uploaded_key_file is not None:
-    try:
-        json_data = json.load(uploaded_key_file)
-        worksheet = connect_google_sheet(json_data)
-        st.sidebar.success("✅ गूगल शीट से सफलतापूर्वक कनेक्शन हो गया!")
-    except Exception as json_err:
-        st.sidebar.error(f"❌ JSON फाइल पढ़ने में त्रुटि: {json_err}")
-else:
-    st.sidebar.warning("⚠️ कृपया बाईं तरफ (Sidebar) अपनी गूगल क्लाउड की JSON फाइल अपलोड करें।")
+worksheet = connect_google_sheet()
 
 # --- 3. पीडीएफ से डेटा निकालने का लॉजिक ---
 def process_single_pdf(pdf_file):
@@ -114,7 +108,7 @@ col1, col2 = st.columns([1, 1])
 
 with col1:
     st.markdown("### 📁 ऑप्शन 1: मैन्युअल अपलोड")
-    uploaded_files = st.file_uploader("मिसिंग इनवॉइस (PDF फाइल्स) यहाँ चुनें:", type="pdf", accept_multiple_files=True)
+    uploaded_files = st.file_uploader("मिसिंग इनवॉउस (PDF फाइल्स) यहाँ चुनें:", type="pdf", accept_multiple_files=True)
 
 with col2:
     st.markdown("### 📥 ऑप्शन 2: ईमेल से डायरेक्ट फेच")
